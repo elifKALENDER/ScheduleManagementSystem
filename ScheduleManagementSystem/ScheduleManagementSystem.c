@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <jansson.h>
+#include <utf8proc.h>
 
 #define MAX_COURSE_COUNT 10
 #define MAX_TEACHER_COUNT 3
@@ -32,12 +34,12 @@ struct Class {
 
 struct Schedule {
     int order;
-    char courseName[50];  // Increased size to accommodate longer course names
+    char courseName[50];
     char teacherName[30];
     char className[MAX_CLASS_NAME_LENGTH];
-    char day[15];  // Increased size to accommodate longer day names
+    char day[15];
     char time[MAX_TIME_FORMAT];
-    char dayTime[21];  // Adjusted size to accommodate combined day and time
+    char dayTime[21];
 };
 
 const char* dayNames[MAX_DAY_COUNT] = { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday" };
@@ -49,14 +51,11 @@ void printSchedule(struct Schedule schedule[], int scheduleCount);
 
 int compareOrder(const void* a, const void* b);
 
-void readFromFile(struct Class classes[], int* classCount, struct Teacher teachers[], int* teacherCount);
-
-void writeToFile(struct Class classes[], int classCount, struct Teacher teachers[], int teacherCount);
+void readFromJsonFile(struct Class classes[], int* classCount, struct Teacher teachers[], int* teacherCount);//*
+void writeToJsonFile(struct Class classes[], int classCount, struct Teacher teachers[], int teacherCount);//*
 
 void addTeacher(struct Teacher teachers[], int* teacherCount);
-
 void deleteTeacher(struct Teacher teachers[], int* teacherCount);
-
 void updateTeacher(struct Teacher teachers[], int teacherCount);
 
 void showMenu();
@@ -68,7 +67,7 @@ int main() {
 
     int teacherCount, classCount, dayCount;
 
-    readFromFile(classes, &classCount, teachers, &teacherCount);
+    readFromJsonFile(classes, &classCount, teachers, &teacherCount);
 
     printf("For how many days will the schedule be created? (Max %d): ", MAX_DAY_COUNT);
     scanf("%d", &dayCount);
@@ -78,10 +77,10 @@ int main() {
         return 1;
     }
 
-    createSchedule(classes, classCount, teachers, teacherCount, schedule, dayCount);
+    createSchedule(classes, MAX_COURSE_COUNT, teachers, teacherCount, schedule, dayCount);
 
     printf("\nSchedule:\n");
-    printSchedule(schedule, classCount);
+    printSchedule(schedule, MAX_COURSE_COUNT);
 
     int choice;
     do {
@@ -104,7 +103,7 @@ int main() {
             // You can add relevant functions here.
             break;
         case 5:
-            writeToFile(classes, classCount, teachers, teacherCount);
+            writeToJsonFile(classes, classCount, teachers, teacherCount);
             break;
         case 0:
             printf("Exiting the program.\n");
@@ -119,23 +118,23 @@ int main() {
 
 void addTeacher(struct Teacher teachers[], int* teacherCount) {
     if (*teacherCount < MAX_TEACHER_COUNT) {
-        printf("Teacher name: ");
+        printf("Öðretmenin adý: ");
         scanf("%s", teachers[*teacherCount].name);
-        printf("Hourly Capacity: ");
+        printf("Saatlik Kapasite: ");
         scanf("%d", &teachers[*teacherCount].hourlyCapacity);
         teachers[*teacherCount].totalTaughtHours = 0;
         (*teacherCount)++;
-        printf("Teacher added.\n");
+        printf("Öðretmen eklendi.\n");
     }
     else {
-        printf("Maximum number of teachers reached.\n");
+        printf("Maksimum öðretmen sayýsýna ulaþýldý.\n");
     }
 }
 
 void deleteTeacher(struct Teacher teachers[], int* teacherCount) {
     if (*teacherCount > 0) {
         char nameToDelete[30];
-        printf("Name of the teacher to be deleted: ");
+        printf("Silinecek öðretmenin adý: ");
         scanf("%s", nameToDelete);
 
         int indexToDelete = -1;
@@ -147,10 +146,10 @@ void deleteTeacher(struct Teacher teachers[], int* teacherCount) {
         }
 
         if (indexToDelete != -1) {
-            // Additional steps, such as reassigning the courses taught by the deleted teacher to other teachers, should be considered.
-            // In this example, we did not address this detail.
+            // Ek adýmlar, silinen öðretmen tarafýndan verilen derslerin diðer öðretmenlere atanmasý gibi, düþünülmelidir.
+            // Bu örnekte, bu detayý ele almadýk.
 
-            // After deleting the teacher, shift the remaining teachers.
+            // Öðretmen silindikten sonra kalan öðretmenleri kaydýr
             for (int i = indexToDelete; i < *teacherCount - 1; i++) {
                 strcpy(teachers[i].name, teachers[i + 1].name);
                 teachers[i].hourlyCapacity = teachers[i + 1].hourlyCapacity;
@@ -158,21 +157,21 @@ void deleteTeacher(struct Teacher teachers[], int* teacherCount) {
             }
 
             (*teacherCount)--;
-            printf("Teacher deleted.\n");
+            printf("Öðretmen silindi.\n");
         }
         else {
-            printf("No teacher found with the specified name.\n");
+            printf("Belirtilen adla öðretmen bulunamadý.\n");
         }
     }
     else {
-        printf("No teacher to delete.\n");
+        printf("Silinecek öðretmen yok.\n");
     }
 }
 
 void updateTeacher(struct Teacher teachers[], int teacherCount) {
     if (teacherCount > 0) {
         char nameToUpdate[30];
-        printf("Name of the teacher to be updated: ");
+        printf("Güncellenecek öðretmenin adý: ");
         scanf("%s", nameToUpdate);
 
         int indexToUpdate = -1;
@@ -184,18 +183,20 @@ void updateTeacher(struct Teacher teachers[], int teacherCount) {
         }
 
         if (indexToUpdate != -1) {
-            printf("New hourly capacity: ");
+            printf("Yeni saatlik kapasite: ");
             scanf("%d", &teachers[indexToUpdate].hourlyCapacity);
-            printf("Teacher updated.\n");
+            printf("Öðretmen güncellendi.\n");
         }
         else {
-            printf("No teacher found with the specified name.\n");
+            printf("Belirtilen adla öðretmen bulunamadý.\n");
         }
     }
     else {
-        printf("No teacher to update.\n");
+        printf("Güncellenecek öðretmen yok.\n");
     }
 }
+
+
 
 void showMenu() {
     printf("\n--- Menu ---\n");
@@ -209,136 +210,240 @@ void showMenu() {
 
 void createSchedule(struct Class classes[], int classCount, struct Teacher teachers[], int teacherCount,
     struct Schedule schedule[], int dayCount) {
-    // This function performs the necessary calculations and assignments to create the schedule.
-    // It does not consider details like the number of students and teachers, which you should address in a real-world application.
+    // Bu fonksiyon, rastgele bir program oluþturacak þekilde tasarlanmýþtýr.
+    // Gerçek uygulamalarda, öðretmen ve sýnýf sayýlarý gibi faktörler daha ayrýntýlý bir plan oluþturmayý gerektirebilir.
 
     int scheduleIndex = 0;
 
-    // Seed for randomization based on current time
+    // Rastgele sayý üretimi için zamanýn kullanýlmasý
     srand((unsigned int)time(NULL));
 
-    // An example assignment, distributing one course from each class based on the number of students and teachers
     for (int i = 0; i < classCount; i++) {
         for (int j = 0; j < classes[i].courseCount; j++) {
-            // Determine the teacher who will teach the course
+            // Rastgele bir öðretmenin seçimi
             int teacherIndex = rand() % teacherCount;
+
+            // Program bilgilerinin schedule dizisine atanmasý
             strcpy(schedule[scheduleIndex].courseName, classes[i].courses[j].name);
             strcpy(schedule[scheduleIndex].className, classes[i].name);
             strcpy(schedule[scheduleIndex].teacherName, teachers[teacherIndex].name);
             schedule[scheduleIndex].order = scheduleIndex + 1;
 
-            // Determine the day and time of the course
+            // Rastgele bir gün seçimi
             int dayIndex = rand() % dayCount;
             strcpy(schedule[scheduleIndex].day, dayNames[dayIndex]);
 
-            // Generate a random time (hour and minute)
-            int hour = rand() % 8 + 8;  // Random hour between 8 and 15
-            int minute = rand() % 60;    // Random minute between 0 and 59
+            // Rastgele bir saat üretimi (saat ve dakika)
+            int hour = rand() % 8 + 8;  // 8 ile 15 arasýnda rastgele bir saat
+            int minute = rand() % 60;    // 0 ile 59 arasýnda rastgele bir dakika
             sprintf(schedule[scheduleIndex].time, "%02d:%02d", hour, minute);
 
-            // Check if the course ends before the school's closing time (15:45)
-            int courseDuration = classes[i].courses[j].hours;  // Course duration in hours
+            // Dersin okulun kapanma saatinden (15:45) önce bitip bitmediðinin kontrolü
+            int courseDuration = classes[i].courses[j].hours;  // Ders süresi
             if (hour + courseDuration < 15 || (hour + courseDuration == 15 && minute <= 45)) {
-                // Course time is valid
-                sprintf(schedule[scheduleIndex].dayTime, "%s - Time-%s", schedule[scheduleIndex].day, schedule[scheduleIndex].time);
+                // Ders saati uygunsa
+                sprintf(schedule[scheduleIndex].dayTime, "%s - Saat-%s", schedule[scheduleIndex].day, schedule[scheduleIndex].time);
                 scheduleIndex++;
             }
         }
     }
 
-    // Use qsort function to sort the schedule
+    // Programýn sýralanmasý için qsort fonksiyonu kullanýlýr
     qsort(schedule, scheduleIndex, sizeof(struct Schedule), compareOrder);
 }
 
 void printSchedule(struct Schedule schedule[], int scheduleCount) {
-    // Print the schedule in tabular format
-    printf("| %-10s | %-12s | %-15s | %-20s | %-15s |\n", "Order", "Course Name", "Teacher Name", "Class Name", "Day - Time");
+    // Programý tablo formatýnda ekrana yazdýrma
+    printf("| %-10s | %-12s | %-15s | %-20s | %-15s |\n", "Sýra", "Ders Adý", "Öðretmen Adý", "Sýnýf Adý", "Gün - Saat");
     printf("|------------|--------------|-----------------|----------------------|-----------------|\n");
     for (int i = 0; i < scheduleCount; i++) {
-        /*printf("| %-10d | %-12s | %-15s | %-20s | %-15s |\n", schedule[i].order, schedule[i].courseName,
-            schedule[i].teacherName, schedule[i].className, schedule[i].dayTime);*/
         printf("| %-10d | %-12s | %-15s | %-20s | %-15s |\n", schedule[i].order, schedule[i].courseName,
-            schedule[i].teacherName, schedule[i].className, schedule[i].day, schedule[i].time);
-
+            schedule[i].teacherName, schedule[i].className, schedule[i].dayTime);
     }
 }
 
 int compareOrder(const void* a, const void* b) {
-    // Comparison function for the qsort function
+    // qsort fonksiyonu için karþýlaþtýrma fonksiyonu
     return ((struct Schedule*)a)->order - ((struct Schedule*)b)->order;
 }
 
-void readFromFile(struct Class classes[], int* classCount, struct Teacher teachers[], int* teacherCount) {
-    FILE* file = fopen("school.txt", "r");
-    if (file == NULL) {
-        printf("File reading error or file not found. A new file will be created.\n");
-        printf("Enter the number of classes: ");
-        scanf("%d", classCount);
 
-        for (int i = 0; i < *classCount; i++) {
-            printf("Enter the class name and number of courses (e.g., A 3): ");
-            scanf("%s %d", classes[i].name, &classes[i].courseCount);
 
-            for (int j = 0; j < classes[i].courseCount; j++) {
-                printf("Enter the course name, responsible teacher, and hours (e.g., math ali 4): ");
-                scanf("%s %s %d", classes[i].courses[j].name, classes[i].courses[j].responsibleTeacher,
-                    &classes[i].courses[j].hours);
-            }
-        }
+void readFromJsonFile(struct Class classes[], int* classCount, struct Teacher teachers[], int* teacherCount) {
+    json_t* root, * classesArray, * teachersArray;
+    json_error_t error;
+    int i, j;
 
-        printf("Enter the number of teachers: ");
-        scanf("%d", teacherCount);
+    // Read JSON content from file
+    FILE* file = fopen("school.json", "r");
 
-        for (int i = 0; i < *teacherCount; i++) {
-            printf("Enter the teacher name and hourly capacity (e.g., ali 10): ");
-            scanf("%s %d", teachers[i].name, &teachers[i].hourlyCapacity);
-            teachers[i].totalTaughtHours = 0;
-        }
+    if (!file) {
+        // Dosya bulunamadýðýnda yeni bir dosya oluþturun
+        printf("Dosya bulunamadý. Yeni bir dosya oluþturuluyor...\n");
+        writeToJsonFile(classes, *classCount, teachers, *teacherCount);
 
-        // Write the newly entered information to the file
-        writeToFile(classes, *classCount, teachers, *teacherCount);
-
-        return;
-    }
-
-    fscanf(file, "%d", classCount);
-    for (int i = 0; i < *classCount; i++) {
-        fscanf(file, "%s %d", classes[i].name, &classes[i].courseCount);
-        for (int j = 0; j < classes[i].courseCount; j++) {
-            fscanf(file, "%s %s %d", classes[i].courses[j].name, classes[i].courses[j].responsibleTeacher,
-                &classes[i].courses[j].hours);
+        // Yeniden okuma iþlemi için dosyayý açýn
+        file = fopen("school.json", "r");
+        if (!file) {
+            fprintf(stderr, "Could not open file for reading.\n");
+            perror("fopen");
+            exit(1);
         }
     }
 
-    fscanf(file, "%d", teacherCount);
-    for (int i = 0; i < *teacherCount; i++) {
-        fscanf(file, "%s %d", teachers[i].name, &teachers[i].hourlyCapacity);
-        teachers[i].totalTaughtHours = 0;
-    }
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
 
+    char* buffer = (char*)malloc(file_size + 1);
+    fread(buffer, 1, file_size, file);
     fclose(file);
-}
 
-void writeToFile(struct Class classes[], int classCount, struct Teacher teachers[], int teacherCount) {
-    FILE* file = fopen("school.txt", "w");
-    if (file == NULL) {
-        printf("File writing error.\n");
+    buffer[file_size] = '\0';
+
+    // Türkçe karakterleri düzelten iþlem
+    char* normalizedBuffer = utf8proc_NFC((uint8_t*)buffer);
+    free(buffer);
+
+    // Parse JSON data
+    root = json_loads(normalizedBuffer, 0, &error);
+    free(normalizedBuffer);
+
+    if (!root) {
+        fprintf(stderr, "JSON parsing error: %s\n", error.text);
         exit(1);
     }
 
-    fprintf(file, "%d\n\n", classCount);
-    for (int i = 0; i < classCount; i++) {
-        fprintf(file, "%s %d\n", classes[i].name, classes[i].courseCount);
-        for (int j = 0; j < classes[i].courseCount; j++) {
-            fprintf(file, "%s %s %d\n", classes[i].courses[j].name, classes[i].courses[j].responsibleTeacher,
-                classes[i].courses[j].hours);
+    // Classes array
+    classesArray = json_object_get(root, "classes");
+    if (!json_is_array(classesArray)) {
+        fprintf(stderr, "Invalid JSON format: 'classes' is not an array.\n");
+        exit(1);
+    }
+    *classCount = json_array_size(classesArray);
+
+    for (i = 0; i < *classCount; i++) {
+        json_t* classObj, * coursesArray;
+
+        // Class object
+        classObj = json_array_get(classesArray, i);
+        strcpy(classes[i].name, json_string_value(json_object_get(classObj, "name")));
+        classes[i].courseCount = json_integer_value(json_object_get(classObj, "courseCount"));
+
+        // Courses array
+        coursesArray = json_object_get(classObj, "courses");
+        if (!json_is_array(coursesArray)) {
+            fprintf(stderr, "Invalid JSON format: 'courses' is not an array.\n");
+            exit(1);
+        }
+        int courseCount = json_array_size(coursesArray);
+
+        for (j = 0; j < courseCount; j++) {
+            json_t* courseObj;
+
+            // Course object
+            courseObj = json_array_get(coursesArray, j);
+            strcpy(classes[i].courses[j].name, json_string_value(json_object_get(courseObj, "name")));
+            strcpy(classes[i].courses[j].responsibleTeacher, json_string_value(json_object_get(courseObj, "responsibleTeacher")));
+            classes[i].courses[j].hours = json_integer_value(json_object_get(courseObj, "hours"));
         }
     }
 
-    fprintf(file, "%d\n\n", teacherCount);
-    for (int i = 0; i < teacherCount; i++) {
-        fprintf(file, "%s %d\n", teachers[i].name, teachers[i].hourlyCapacity);
+    // Teachers array
+    teachersArray = json_object_get(root, "teachers");
+    if (!json_is_array(teachersArray)) {
+        fprintf(stderr, "Invalid JSON format: 'teachers' is not an array.\n");
+        exit(1);
+    }
+    *teacherCount = json_array_size(teachersArray);
+
+    for (i = 0; i < *teacherCount; i++) {
+        json_t* teacherObj;
+
+        // Teacher object
+        teacherObj = json_array_get(teachersArray, i);
+        strcpy(teachers[i].name, json_string_value(json_object_get(teacherObj, "name")));
+        teachers[i].hourlyCapacity = json_integer_value(json_object_get(teacherObj, "hourlyCapacity"));
+        teachers[i].totalTaughtHours = json_integer_value(json_object_get(teacherObj, "totalTaughtHours"));
     }
 
+    // Cleanup
+    json_decref(root);
+}
+
+void writeToJsonFile(struct Class classes[], int classCount, struct Teacher teachers[], int teacherCount) {
+    json_t* root, * classesArray, * teachersArray;
+    int i, j;
+
+    // Root JSON object
+    root = json_object();
+
+    // Classes array
+    classesArray = json_array();
+    for (i = 0; i < classCount; i++) {
+        json_t* classObj, * coursesArray;
+
+        // Class object
+        classObj = json_object();
+        json_object_set_new(classObj, "name", json_string(classes[i].name));
+        json_object_set_new(classObj, "courseCount", json_integer(classes[i].courseCount));
+
+        // Courses array
+        coursesArray = json_array();
+        for (j = 0; j < classes[i].courseCount; j++) {
+            json_t* courseObj;
+
+            // Course object
+            courseObj = json_object();
+            json_object_set_new(courseObj, "name", json_string(classes[i].courses[j].name));
+            json_object_set_new(courseObj, "responsibleTeacher", json_string(classes[i].courses[j].responsibleTeacher));
+            json_object_set_new(courseObj, "hours", json_integer(classes[i].courses[j].hours));
+
+            // Add course object to courses array
+            json_array_append_new(coursesArray, courseObj);
+        }
+
+        // Add courses array to class object
+        json_object_set_new(classObj, "courses", coursesArray);
+
+        // Add class object to classes array
+        json_array_append_new(classesArray, classObj);
+    }
+
+    // Teachers array
+    teachersArray = json_array();
+    for (i = 0; i < teacherCount; i++) {
+        json_t* teacherObj;
+
+        // Teacher object
+        teacherObj = json_object();
+        json_object_set_new(teacherObj, "name", json_string(teachers[i].name));
+        json_object_set_new(teacherObj, "hourlyCapacity", json_integer(teachers[i].hourlyCapacity));
+        json_object_set_new(teacherObj, "totalTaughtHours", json_integer(teachers[i].totalTaughtHours));
+
+        // Add teacher object to teachers array
+        json_array_append_new(teachersArray, teacherObj);
+    }
+
+    // Add arrays to root object
+    json_object_set_new(root, "classes", classesArray);
+    json_object_set_new(root, "teachers", teachersArray);
+
+    // Write JSON content to file
+    FILE* file = fopen("school.json", "w");
+    if (!file) {
+        fprintf(stderr, "Could not open file for writing.\n");
+        perror("fopen");
+        exit(1);
+    }
+
+    json_dumpf(root, file, JSON_INDENT(2));
+
+    /*char* jsonStr = json_dumps(root, JSON_INDENT(2));
+    fprintf(file, "%s\n", jsonStr);*/
+
+    // Cleanup
     fclose(file);
+    //free(jsonStr);
+    json_decref(root);
 }
